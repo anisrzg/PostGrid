@@ -292,8 +292,74 @@ def compute_grid_spacing(data):
 
     return(dx, dy, dz)
 
-
 def construct_grid(df):
+    unique_x = df['x'].unique()
+    unique_y = df['y'].unique()
+    unique_z = df['z'].unique()
+    nx = len(unique_x)
+    ny = len(unique_y)
+    nz = len(unique_z)
+
+    points = df[['x', 'y', 'z']].values
+    velocity = df['Velocity'].values
+    vorticity = df['Vorticity'].values
+    pressure = df['Pressure'].values
+    Sw = df['Swirling strength'].values
+    Vx = df['Vx'].values
+    Vy = df['Vy'].values
+    Vz = df['Vz'].values
+
+    grid = pv.StructuredGrid()
+    grid.points = points
+    grid.dimensions = [nx, ny, nz]  # nx, ny, nz doivent être définis
+
+    fields = [velocity, vorticity, pressure, Sw, Vx, Vy, Vz]
+    fields_name = ['Velocity', 'Vorticity', 'Pressure', 'Swirling strength', 'Vx', 'Vy', 'Vz']
+    for i in range(len(fields)):
+        grid.point_data[fields_name[i]] = fields[i].tolist()
+
+    # Extraire les composantes des dérivées de gradV
+    gradV = np.array([np.array(matrix).reshape(3, 3) for matrix in df['gradV'].values])
+
+    grad_components = {
+        'du_dx': gradV[:, 0, 0],
+        'du_dy': gradV[:, 0, 1],
+        'du_dz': gradV[:, 0, 2],
+        'dv_dx': gradV[:, 1, 0],
+        'dv_dy': gradV[:, 1, 1],
+        'dv_dz': gradV[:, 1, 2],
+        'dw_dx': gradV[:, 2, 0],
+        'dw_dy': gradV[:, 2, 1],
+        'dw_dz': gradV[:, 2, 2],
+    }
+
+    for component_name, component_data in grad_components.items():
+        grid.point_data[component_name] = component_data.tolist()
+
+    # Ajouter les nouveaux champs
+    additional_fields = [
+        df['Vx_mean'].values, df['Vy_mean'].values, df['Vz_mean'].values,
+        df['Vx_p'].values, df['Vy_p'].values, df['Vz_p'].values,
+        df['Rxx_x'].values, df['Rxy_x'].values, df['Rxz_x'].values,
+        df['Ryy_x'].values, df['Ryz_x'].values, df['Rzz_x'].values,
+        df['Rxx_y'].values, df['Rxy_y'].values, df['Rxz_y'].values,
+        df['Ryy_y'].values, df['Ryz_y'].values, df['Rzz_y'].values
+    ]
+
+    additional_fields_names = [
+        'Vx_mean', 'Vy_mean', 'Vz_mean', 'Vx_p', 'Vy_p', 'Vz_p',
+        'Rxx_x', 'Rxy_x', 'Rxz_x', 'Ryy_x', 'Ryz_x', 'Rzz_x',
+        'Rxx_y', 'Rxy_y', 'Rxz_y', 'Ryy_y', 'Ryz_y', 'Rzz_y'
+    ]
+
+    for name, data in zip(additional_fields_names, additional_fields):
+        grid.point_data[name] = data.tolist()
+
+    grid = grid.delaunay_3d(alpha=0.0, tol=0.0001, offset=2.5, progress_bar=True)
+
+    return grid
+
+def construct_grid_old(df):
     unique_x = df['x'].unique()
     unique_y = df['y'].unique()
     unique_z = df['z'].unique()
@@ -342,37 +408,6 @@ def construct_grid(df):
     return grid
 
 
-def construct_grid_old(df):
-    unique_x = df['x'].unique()
-    unique_y = df['y'].unique()
-    unique_z = df['z'].unique()
-    nx = len(unique_x)
-    ny = len(unique_y)
-    nz = len(unique_z)
-
-    points = df[['x', 'y', 'z']].values
-    velocity = df['Velocity'].tolist()
-    vorticity =  df['Vorticity'].tolist()
-    pressure = df['Pressure'].tolist()
-    Sw = df['Swirling strength'].tolist()
-    Vx = df['Vx'].tolist()
-    Vy = df['Vy'].tolist()
-    Vz = df['Vz'].tolist()
-
-    grid = pv.StructuredGrid()
-    grid.points = points
-    grid.dimensions = [nx, ny, nz]  # nx, ny, nz doivent être définis
-
-    #grid.point_data['Velocity'] = velocity
-    fields = [velocity, vorticity, pressure, Sw, Vx, Vy, Vz]
-    fields_name = ['Velocity', 'Vorticity', 'Pressure', 'Swirling strength', 'Vx', 'Vy', 'Vz']
-    for i in range(len(fields)):
-        grid.point_data[fields_name[i]] = fields[i]
-
-    grid = grid.delaunay_3d(alpha=0.0, tol=0.0001, offset=2.5, progress_bar=True)
-
-    return(grid)
-
 """
     Usefull functions
 """
@@ -382,54 +417,86 @@ def tri_double(X,Y):
     Y = np.array(Y)[sorted_indices]
     return(X,Y)
 
+def merge_dataframes(df1, df2, on_columns):
+    """
+    Fusionne deux DataFrames sur les colonnes communes spécifiées.
+    
+    Paramètres:
+    - df1: Premier DataFrame.
+    - df2: Deuxième DataFrame.
+    - on_columns: Liste des noms de colonnes sur lesquelles fusionner les DataFrames.
+    
+    Retourne:
+    - DataFrame fusionné.
+    """
+    merged_df = pd.merge(df1, df2, on=on_columns)
+    return merged_df
 
 """
-def sample_over_line2(data, A, B, axis):
-    dx = compute_grid_spacing(data) # Compute grid spacing
-    if axis == "x":
-        condition = (
-        (data['position'].apply(lambda pos: pos[0]) >= A[0] - dx) & (data['position'].apply(lambda pos: pos[0]) <= B[0] + dx) &
-        (data['position'].apply(lambda pos: pos[0]) >= A[1] - dx) & (data['position'].apply(lambda pos: pos[0]) <= B[1] + dx) &
-        (data['position'].apply(lambda pos: pos[0]) >= A[2] - dx) & (data['position'].apply(lambda pos: pos[0]) <= B[2] + dx)
-        )
-    
-    line = data[condition]
-    return(line)
-
-def sample_over_plan2(data, plan, normal_coordinate, field_name, N_points):
-    dx = compute_grid_spacing(data)
-    low_limit = normal_coordinate - dx/2
-    high_limit = normal_coordinate + dx/2
-    
-    if plan == "xy":
-        x = data['x']
-        y = data['y']
-        data = clip_in_volume(data, (np.min(x), np.max(x)), (np.min(y), np.max(y)), (low_limit, high_limit))
-        x = data['x']
-        y = data['y']
-    
-    if plan == "xz":
-        x = data['x']
-        y = data['z']
-        data = clip_in_volume(data, (np.min(x), np.max(x)), (low_limit, high_limit), (np.min(y), np.max(y)))
-        x = data['x']
-        y = data['z']
-    
-    if plan == "yz":
-        x = data['y']
-        y = data['z']
-        data = clip_in_volume(data, (low_limit, high_limit), (np.min(x), np.max(x)), (np.min(y), np.max(y)))
-        x = data['x']
-        y = data['y']
-    
-    xi = np.linspace(x.min(), x.max(), N_points)
-    yi = np.linspace(y.min(), y.max(), N_points)
-    xi, yi = np.meshgrid(xi, yi)
-    field = data[field_name]
-
-    print(len(x))
-    print(len(field))
-
-    field = scipy.interpolate.griddata((x, y), field, (xi, yi), method='cubic')
+    Turbulence analysis
+        - Velocity field average computation (temporeal average)
+        - Velocity fluctuations computation
+        - Reynolds tensor computation
+        - PSD computation
 
 """
+
+def calculate_temporal_mean(data):
+    print('Computing temporel mean of the velocity field')
+    grouped = data.groupby(['x', 'y', 'z'])
+    mean_velocities = grouped[['Vx', 'Vy', 'Vz']].mean().reset_index()
+    mean_velocities.columns = ['x', 'y', 'z', 'Vx_mean', 'Vy_mean', 'Vz_mean']
+    return(mean_velocities)
+
+def calculate_fluctuations(data):
+    """
+    Calcule les fluctuations temporelles des composantes de vitesse pour chaque point spatial.
+    
+    Paramètres:
+    - data: DataFrame contenant les données avec les colonnes ['time', 'x', 'y', 'z', 'Vx', 'Vy', 'Vz']
+    
+    Retourne:
+    - DataFrame avec les fluctuations temporelles des composantes de vitesse pour chaque point spatial
+    """
+    
+    if 'Vx_mean' not in data:
+        mean_velocities = calculate_temporal_mean(data) # Calculer la moyenne temporelle
+        data = pd.merge(data, mean_velocities, on=['x', 'y', 'z']) # Fusionner les moyennes temporelles avec les données originales
+
+    # Calculer les fluctuations temporelles
+    print('Computing velocity temporal fluctuations')
+    data['Vx_p'] = data['Vx'] - data['Vx_mean']
+    data['Vy_p'] = data['Vy'] - data['Vy_mean']
+    data['Vz_p'] = data['Vz'] - data['Vz_mean']
+    
+    # Sélectionner les colonnes d'intérêt
+    fluctuations = data[['time', 'x', 'y', 'z', 'Vx_p', 'Vy_p', 'Vz_p']]
+    
+    return fluctuations, data
+
+def calculate_reynolds_stress(data):
+    """
+    Calcule le tenseur des contraintes de Reynolds pour chaque point spatial.
+    
+    Paramètres:
+    - data: DataFrame contenant les données avec les colonnes ['time', 'x', 'y', 'z', 'Vx', 'Vy', 'Vz']
+    
+    Retourne:
+    - DataFrame avec les composantes du tenseur des contraintes de Reynolds pour chaque point spatial
+    """
+
+    print('Computing Reynolds stress tensor')
+
+    grouped = data.groupby(['x', 'y', 'z']) # Grouper les données par les coordonnées spatiales (x, y, z) et temporel
+    
+    # Calculer les composantes du tenseur des contraintes de Reynolds
+    reynolds_stress = grouped.apply(lambda g: pd.Series({
+        'Rxx': (g['Vx_p'] * g['Vx_p']).mean(),
+        'Rxy': (g['Vx_p'] * g['Vy_p']).mean(),
+        'Rxz': (g['Vx_p'] * g['Vz_p']).mean(),
+        'Ryy': (g['Vy_p'] * g['Vy_p']).mean(),
+        'Ryz': (g['Vy_p'] * g['Vz_p']).mean(),
+        'Rzz': (g['Vz_p'] * g['Vz_p']).mean()
+    })).reset_index()
+    
+    return reynolds_stress

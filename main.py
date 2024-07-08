@@ -40,6 +40,19 @@ data = clean_data(data, cylinders, R)
 xu, yu, zu = np.unique(data['x']), np.unique(data['y']), np.unique(data['z'])
 dx, dy, dz = compute_grid_spacing(data) # Compute grid spacing
 
+
+"""
+    Calcul des grandeurs de la turbulence
+"""
+
+fluctuations, data = calculate_fluctuations(data) # Calcul des fluctuations de vitesse
+Rstress = calculate_reynolds_stress(data) # Calcul du tensor de reynolds
+data = merge_dataframes(data, g, ['time', 'x', 'y', 'z'])
+
+
+"""
+    Construction des grilles Pyvista
+"""
 # Construction des grilles vtk et du block global
 dataset = []
 n = 0
