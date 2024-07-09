@@ -8,6 +8,7 @@ from scipy.interpolate import griddata
 from scipy.interpolate import interp1d
 import scipy
 from scipy.interpolate import RegularGridInterpolator
+from scipy.fft import fft, fftfreq
 
 def read(file_path):
     # Lire toutes les lignes du fichier
@@ -336,20 +337,18 @@ def construct_grid(df):
     for component_name, component_data in grad_components.items():
         grid.point_data[component_name] = component_data.tolist()
 
-    # Ajouter les nouveaux champs
+    # Ajouter les champs supplémentaires pour les fluctuations de vitesse et le tenseur de Reynolds
     additional_fields = [
         df['Vx_mean'].values, df['Vy_mean'].values, df['Vz_mean'].values,
         df['Vx_p'].values, df['Vy_p'].values, df['Vz_p'].values,
-        df['Rxx_x'].values, df['Rxy_x'].values, df['Rxz_x'].values,
-        df['Ryy_x'].values, df['Ryz_x'].values, df['Rzz_x'].values,
-        df['Rxx_y'].values, df['Rxy_y'].values, df['Rxz_y'].values,
-        df['Ryy_y'].values, df['Ryz_y'].values, df['Rzz_y'].values
+        df['Rxx'].values, df['Rxy'].values, df['Rxz'].values,
+        df['Ryx'].values, df['Ryy'].values, df['Rzx'].values,
+        df['Rzx'].values, df['Rzy'].values, df['Rzz'].values
     ]
 
     additional_fields_names = [
         'Vx_mean', 'Vy_mean', 'Vz_mean', 'Vx_p', 'Vy_p', 'Vz_p',
-        'Rxx_x', 'Rxy_x', 'Rxz_x', 'Ryy_x', 'Ryz_x', 'Rzz_x',
-        'Rxx_y', 'Rxy_y', 'Rxz_y', 'Ryy_y', 'Ryz_y', 'Rzz_y'
+        'Rxx', 'Rxy', 'Rxz', 'Ryx', 'Ryy', 'Ryz', 'Rzx', 'Rzy','Rzz'
     ]
 
     for name, data in zip(additional_fields_names, additional_fields):
@@ -494,9 +493,44 @@ def calculate_reynolds_stress(data):
         'Rxx': (g['Vx_p'] * g['Vx_p']).mean(),
         'Rxy': (g['Vx_p'] * g['Vy_p']).mean(),
         'Rxz': (g['Vx_p'] * g['Vz_p']).mean(),
+        'Ryx': (g['Vy_p'] * g['Vx_p']).mean(),
         'Ryy': (g['Vy_p'] * g['Vy_p']).mean(),
         'Ryz': (g['Vy_p'] * g['Vz_p']).mean(),
+        'Rzx': (g['Vz_p'] * g['Vx_p']).mean(),
+        'Rzy': (g['Vz_p'] * g['Vy_p']).mean(),
         'Rzz': (g['Vz_p'] * g['Vz_p']).mean()
     })).reset_index()
     
     return reynolds_stress
+
+
+
+def calculate_psd(x, V, V_fluct):
+    """
+    Calcule la densité spectrale de puissance (PSD) du champ V(x) le long de la ligne x.
+    
+    :param x: array-like, les coordonnées x
+    :param V: array-like, les valeurs du champ V en x
+    :return: freq, psd, les fréquences spatiales et la PSD correspondante
+    """
+    # Assurer que les données sont uniformément espacées
+    dx = x[1] - x[0]
+    if not np.allclose(np.diff(x), dx):
+        raise ValueError("Les valeurs de x doivent être uniformément espacées")
+
+    # Calculer la moyenne et les fluctuations de vitesse
+    #V_mean = np.mean(V)
+    #V_fluct = V - V_mean
+    #V_fluct = V_fluct * 1000
+    
+    V_fft = fft(V_fluct) # Calcul de la transformée de Fourier des fluctuations de vitesse
+    
+    # Calculer les fréquences spatiales
+    N = len(V)
+    freq = fftfreq(N, dx)[:N//2]
+    
+    # Calculer la densité spectrale de puissance (PSD)
+    psd = (np.abs(V_fft[:N//2])**2) / (np.trapz(np.abs(V_fft[:N//2]), dx=freq[1] - freq[0])) * np.var(V)
+
+
+    return freq, psd

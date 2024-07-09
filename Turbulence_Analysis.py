@@ -48,7 +48,7 @@ dx, dy, dz = compute_grid_spacing(data) # Compute grid spacing
 
 fluctuations, data = calculate_fluctuations(data) # Calcul des fluctuations de vitesse
 Rstress = calculate_reynolds_stress(data) # Calcul du tensor de reynolds
-data = merge_dataframes(data, g, ['time', 'x', 'y', 'z'])
+data = merge_dataframes(data, Rstress, ['x', 'y', 'z'])
 
 
 """
@@ -63,3 +63,63 @@ for t in time:
     grid.save(f'{SAVE_DIRECTORY}/VTK data/output_{n:05}.vtk')
     dataset.append(grid)
     n+=1
+
+
+colors = ['black', 'blue', 'red', 'green', 'purple', 'orange']
+
+"""
+Plot 1D   
+"""
+
+timesteps = [0, 100, 200] # Time to plot
+i = 0
+plt.figure(figsize=(8, 8))
+for tp in timesteps:
+    grid = dataset[tp]
+    t = time[tp]
+    df = filter_by_time(data, t)
+    x = df['x'].tolist()
+    #a = [np.min(x), 2, 0.5]
+    #b = [np.max(x), 2, 0.5]
+    a = [0, 2, 0.5]
+    b = [12, 2, 0.5]
+
+    x, Rx = sample_over_line(grid, "Rxx", a, b, "x")
+    x, Ry = sample_over_line(grid, "Rxx", a, b, "x")
+    Rx, Ry = np.array(Rx), np.array(Rx)
+    R = np.sqrt(Rx**2 + Ry**2)
+    
+    plt.plot(x, R, color = colors[i], label = f't = {time[tp]} s')
+    i+=1
+plt.xlim(-1, 13)
+plt.xlabel('x [mm]')
+plt.ylabel('Cross velocity (mm/s)')
+plt.grid(linestyle = '--')
+plt.legend()
+plt.show()
+
+"""
+    Calcul PSD fluctuations
+"""
+
+t = time[380]
+df = filter_by_time(data, t)
+a, b = [0, 5, 0.5], [12, 5, 0.5]
+
+x, Vx = sample_over_line(grid, "Vy", a, b, "x")
+x, Vx_fluct = sample_over_line(grid, "Vy_p", a, b, "x")
+freqx, psdx = calculate_psd(x, Vx, Vx_fluct)
+
+psdx = psdx * 1000
+
+plt.figure(figsize=(8, 8))
+plt.plot(freqx, psdx, color = 'black', marker = 'x', label = 'u * 1000')
+plt.title('Densité spectrale de puissance (PSD)')
+plt.xlabel('Fréquence spatiale (ξ)')
+plt.ylabel('PSD')
+plt.grid(True)
+plt.show()
+
+
+
+

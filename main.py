@@ -47,7 +47,7 @@ dx, dy, dz = compute_grid_spacing(data) # Compute grid spacing
 
 fluctuations, data = calculate_fluctuations(data) # Calcul des fluctuations de vitesse
 Rstress = calculate_reynolds_stress(data) # Calcul du tensor de reynolds
-data = merge_dataframes(data, g, ['time', 'x', 'y', 'z'])
+data = merge_dataframes(data, Rstress, ['time', 'x', 'y', 'z'])
 
 
 """
