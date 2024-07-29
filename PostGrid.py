@@ -20,12 +20,15 @@ def read(file_path):
 
     # Parcourir les lignes du fichier et collecter les données après la zone des métadonnées
     solution_time = None
+    data_started = False
     for line in lines:
         if 'SOLUTIONTIME' in line:
             solution_time = float(re.search(r'SOLUTIONTIME\s*=\s*(\d*\.?\d+)', line).group(1))
-        #if line.strip().isdigit() or line.strip().startswith('-'):
-        if line.strip() and (line.strip()[0].isdigit() or line.strip().startswith('-')):
-            data_list.append([solution_time] + [val for val in line.split()])
+        elif re.match(r'^\s*-?\d', line):  # Ligne de données numériques
+            data_started = True
+            data_list.append([solution_time] + [float(val) for val in line.split()])
+        elif data_started:  # Si on a commencé à lire des données et qu'une ligne ne correspond pas, arrêter la lecture
+            break
 
     # Définir les colonnes pour le DataFrame
     columns = ["time", "x", "y", "z", 
@@ -33,63 +36,38 @@ def read(file_path):
                "du/dx", "du/dy", "du/dz", "dv/dx", "dv/dy", "dv/dz", "dw/dx", "dw/dy", "dw/dz", 
                "Vorticity w_x (dw/dy - dv/dz)", "Vorticity w_y (du/dz - dw/dx)", "Vorticity w_z (dv/dx - du/dy)", "|Vorticity|", 
                "Divergence 2D (du/dx + dv/dy)", "Divergence 3D (du/dx + dv/dy + dw/dz)", 
-               "Swirling strength 3D (L_2)", "Pressure", "isValid"]
-    
+               "Swirling strength 3D (L_2)", "Pressure"]
+
+    # Vérifiez si le nombre de colonnes correspond au nombre de colonnes de données
+    num_columns = len(data_list[0])
+    if num_columns != len(columns):
+        raise ValueError(f"Le nombre de colonnes ({num_columns}) dans les données ne correspond pas au nombre de colonnes spécifiées ({len(columns)}).")
+
     data = pd.DataFrame(data_list, columns=columns)
     
+    # Assurez-vous que les colonnes sont numériques
     for col in columns[1:]:
         data[col] = pd.to_numeric(data[col])
-    #print(data.columns)
+    
+    # Ajuster les coordonnées
     data['x'] = data['x'] + abs(np.min(data['x']))
     data['y'] = data['y'] + abs(np.min(data['y']))
+    
+    # Renommer les colonnes pour la vitesse
     data['Vx'] = data['Velocity u']
     data['Vy'] = data['Velocity v']
     data['Vz'] = data['Velocity w']
 
+    # Créer les listes de colonnes supplémentaires
     data['Velocity'] = data[['Vx', 'Vy', 'Vz']].values.tolist()
     data['position'] = data[['x', 'y', 'z']].values.tolist()
     data['Vorticity'] = data[["Vorticity w_x (dw/dy - dv/dz)", "Vorticity w_y (du/dz - dw/dx)", "Vorticity w_z (dv/dx - du/dy)"]].values.tolist()
-    data['gradV'] = np.array([[data['du/dx'].values, data['du/dy'].values, data['du/dz'].values],
-                            [data['dv/dx'].values, data['dv/dy'].values, data['dv/dz'].values],
-                            [data['dw/dx'].values, data['dw/dy'].values, data['dw/dz'].values]]).T.tolist()
+    data['gradV'] = data.apply(lambda row: [[row['du/dx'], row['du/dy'], row['du/dz']],
+                                            [row['dv/dx'], row['dv/dy'], row['dv/dz']],
+                                            [row['dw/dx'], row['dw/dy'], row['dw/dz']]], axis=1).tolist()
     data['Swirling strength'] = data["Swirling strength 3D (L_2)"]
 
-    final_columns = ['time', 'x', 'y', 'z', 'Vx', 'Vy', 'Vz', 'position', 'Velocity', 'Pressure', 'Vorticity', 'gradV', "Swirling strength",]
-    result = data[final_columns]
-    return result
-
-def read_data(file_path, dt):
-    file_name = file_path.split('/')[-1]  # Obtient le nom du fichier
-    match = re.search(r'B(\d+)\.csv', file_name)
-    if not match:
-        raise ValueError("Le nom de fichier ne correspond pas au format attendu 'B_n.csv'")
-    n = int(match.group(1))
-
-    # Computation of SOLUTIONTIME
-    solution_time = n * dt
-
-    data = pd.read_csv(file_path, sep = ";")
-    data['time'] = solution_time # Adding the time column
-    
-    for col in data.columns[1:]:
-        data[col] = pd.to_numeric(data[col])
-
-    # Adjusting x and y space variables to start at 0
-    data['x'] = data['x'] + abs(np.min(data['x']))
-    data['y'] = data['y'] + abs(np.min(data['y']))
-    
-    data['Vx'] = data['Velocity u']
-    data['Vy'] = data['Velocity v']
-    data['Vz'] = data['Velocity w']
-    data['Velocity'] = data[['Vx', 'Vy', 'Vz']].values.tolist()
-    data['position'] = data[['x', 'y', 'z']].values.tolist()
-    data['Vorticity'] = data[["Vorticity w_x (dw/dy - dv/dz)", "Vorticity w_y (du/dz - dw/dx)", "Vorticity w_z (dv/dx - du/dy)"]].values.tolist()
-    data['gradV'] = np.array([[data['du/dx'].values, data['du/dy'].values, data['du/dz'].values],
-                              [data['dv/dx'].values, data['dv/dy'].values, data['dv/dz'].values],
-                              [data['dw/dx'].values, data['dw/dy'].values, data['dw/dz'].values]]).T.tolist()
-    data['Swirling strength'] = data["Swirling strength 3D (L_2)"]
-
-    # Defining final columns
+    # Colonnes finales à inclure dans le résultat
     final_columns = ['time', 'x', 'y', 'z', 'Vx', 'Vy', 'Vz', 'position', 'Velocity', 'Pressure', 'Vorticity', 'gradV', "Swirling strength"]
     result = data[final_columns]
     return result
@@ -111,22 +89,6 @@ def read_all_timesteps(directory):
 
     return combined_data
 
-def read_all_timesteps2(directory, dt):
-    files = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
-    files.sort()
-
-    all_data = []
-    n = 0
-    for filename in files:
-        print(f'Reading timestep {n}')
-        file_path = os.path.join(directory, filename)
-        timestep_data = read_data(file_path, dt)
-        all_data.append(timestep_data)
-        n+=1
-
-    combined_data = pd.concat(all_data, ignore_index=True)
-
-    return combined_data
 
 
 def read_csv_to_dataframe(file_path):
@@ -177,7 +139,7 @@ def filter_by_time(data, t):
     #print(f"Filtered data size: {len(filtered_data)}")
     return filtered_data
 
-def clip_in_volume(data, x_range, y_range, z_range):
+def clip_in_volume2(data, x_range, y_range, z_range):
     # Apply conditions for each axis
     condition = (
         (data['position'].apply(lambda pos: pos[0]) >= x_range[0]) & (data['position'].apply(lambda pos: pos[0]) <= x_range[1]) &
@@ -191,6 +153,19 @@ def clip_in_volume(data, x_range, y_range, z_range):
 
     return clipped_data
 
+def clip_in_volume(data, x_range, y_range, z_range):
+    # Apply conditions for each axis
+    condition = (
+        (data['x'] >= x_range[0]) & (data['x'] <= x_range[1]) &
+        (data['y'] >= y_range[0]) & (data['y'] <= y_range[1]) &
+        (data['z'] >= z_range[0]) & (data['z'] <= z_range[1])
+    )
+
+    # Filter data based on the defined condition
+    clipped_data = data[condition]
+    print(f"Clipped data size: {len(clipped_data)}")
+
+    return clipped_data
 
 def sample_over_line(domain, field_name, a, b, line_axis):
     '''
@@ -534,3 +509,12 @@ def calculate_psd(x, V, V_fluct):
 
 
     return freq, psd
+
+
+
+def remove_points_inside_cylinder2(df_fluid, xc, yc, R):
+
+    radial_dist = (df_fluid['x'] - xc)**2 + (df_fluid['z'] - yc)**2 # Compute the distance squared from the cylinder axis
+    outside = radial_dist >= R**2 # Identify points outside the cylinder
+
+    return df_fluid[outside]

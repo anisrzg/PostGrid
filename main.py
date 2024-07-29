@@ -69,30 +69,39 @@ for t in time:
 
 colors = ['black', 'blue', 'red', 'green', 'purple', 'orange']
 
+uncertainty_Vx, uncertainty_Vy, uncertainty_Vz = 1, 1.12, 2.80
+
 """
     Profiles de vitesse
 """
 
 """ Profile Vx(x) sur ligne x """
 
-timesteps = [0, 100, 200, 400] # Time to plot
+timesteps = [100, 150, 200] # Time to plot
 i = 0
 plt.figure(figsize=(8, 8))
 for tp in timesteps:
     grid = dataset[tp]
     t = time[tp]
-    df = filter_by_time(data, t)
-    x = df['x'].tolist()
-    #a = [np.min(x), 2, 0.5]
-    #b = [np.max(x), 2, 0.5]
     a = [0, 2, 0.5]
     b = [12, 2, 0.5]
 
     x, V = sample_over_line(grid, "Velocity", a, b, "x")
-    V = [v[0] for v in V]
-
+    V = np.array([v[0] * 1000 for v in V])
     
-    plt.plot(x, V, color = colors[i], label = f't = {time[tp]} s')
+    # Incertitudes
+    V_upper = V + uncertainty_Vx
+    V_lower = V - uncertainty_Vx
+    
+    for j in range(len(V)):
+        if V[j] == 0:
+            V[j] = np.nan
+            V_upper[j] = np.nan
+            V_lower[j] = np.nan
+            
+    plt.fill_between(x, V_lower, V_upper, color = colors[i], alpha=0.1)
+    
+    plt.plot(x, V, color = colors[i], linestyle = 'dashed', label = f't = {time[tp]} s')
     i+=1
 plt.xlim(-1, 13)
 plt.xlabel('x [mm]')
@@ -101,27 +110,33 @@ plt.grid(linestyle = '--')
 plt.legend()
 plt.show()
 
-
-
-
 """ Profile Vy(x) sur ligne x """
 
-timesteps = [0, 100, 200, 400] # Time to plot
+timesteps = [100, 150, 200] # Time to plot
 i = 0
 plt.figure(figsize=(8, 8))
 for tp in timesteps:
     grid = dataset[tp]
     t = time[tp]
-    df = filter_by_time(data, t)
-    x = df['x'].tolist()
     a = [0, 2, 0.5]
     b = [12, 2, 0.5]
 
     x, V = sample_over_line(grid, "Velocity", a, b, "x")
-    V = [v[1] for v in V]
-
+    V = np.array([v[1] * 1000 for v in V])
     
-    plt.plot(x, V, color = colors[i], label = f't = {time[tp]} s')
+    # Incertitudes
+    V_upper = V + uncertainty_Vy
+    V_lower = V - uncertainty_Vy
+    
+    for j in range(len(V)):
+        if V[j] == 0:
+            V[j] = np.nan
+            V_upper[j] = np.nan
+            V_lower[j] = np.nan
+            
+    plt.fill_between(x, V_lower, V_upper, color = colors[i], alpha=0.1)
+    
+    plt.plot(x, V, color = colors[i], linestyle = 'dashed', label = f't = {time[tp]} s')
     i+=1
 plt.xlim(-1, 13)
 plt.xlabel('x [mm]')
@@ -129,6 +144,7 @@ plt.ylabel('Axial velocity (mm/s)')
 plt.grid(linestyle = '--')
 plt.legend()
 plt.show()
+
 
 
 """

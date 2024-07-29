@@ -66,30 +66,31 @@ for t in time:
 
 
 colors = ['black', 'blue', 'red', 'green', 'purple', 'orange']
+markers = ['x', 'o',',','1' ]
 
 """
 Plot 1D   
 """
+uncertainty_Vx, uncertainty_Vy, uncertainty_Vz = 1, 1.12, 2.80
 
-timesteps = [0, 100, 200] # Time to plot
+timesteps = [100, 200] # Time to plot
 i = 0
 plt.figure(figsize=(8, 8))
 for tp in timesteps:
     grid = dataset[tp]
     t = time[tp]
-    df = filter_by_time(data, t)
-    x = df['x'].tolist()
     #a = [np.min(x), 2, 0.5]
     #b = [np.max(x), 2, 0.5]
     a = [0, 2, 0.5]
     b = [12, 2, 0.5]
 
     x, Rx = sample_over_line(grid, "Rxx", a, b, "x")
-    x, Ry = sample_over_line(grid, "Rxx", a, b, "x")
-    Rx, Ry = np.array(Rx), np.array(Rx)
-    R = np.sqrt(Rx**2 + Ry**2)
+    for j in range(len(Rx)):
+        if Rx[j] == 0:
+            Rx[j] = np.nan
     
-    plt.plot(x, R, color = colors[i], label = f't = {time[tp]} s')
+    
+    plt.plot(x, Rx, color = colors[i], marker = markers[i], label = f't = {time[tp]} s')
     i+=1
 plt.xlim(-1, 13)
 plt.xlabel('x [mm]')
@@ -106,8 +107,8 @@ t = time[380]
 df = filter_by_time(data, t)
 a, b = [0, 5, 0.5], [12, 5, 0.5]
 
-x, Vx = sample_over_line(grid, "Vy", a, b, "x")
-x, Vx_fluct = sample_over_line(grid, "Vy_p", a, b, "x")
+x, Vx = sample_over_line(grid, "Vx", a, b, "x")
+x, Vx_fluct = sample_over_line(grid, "Vx_p", a, b, "x")
 freqx, psdx = calculate_psd(x, Vx, Vx_fluct)
 
 psdx = psdx * 1000
